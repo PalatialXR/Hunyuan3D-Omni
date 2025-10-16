@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 def run_auto_scale_pipeline(
     image_path: str,
     output_dir: str,
+    project_id: Optional[str] = None,
     openai_model: str = "gpt-4o",
     custom_prompt: Optional[str] = None,
     guidance_scale: float = 4.5,
@@ -109,6 +110,11 @@ def run_auto_scale_pipeline(
         "--log_level", str(log_level)
     ]
     
+    # Pass output_file if project_id provided for standard naming convention
+    if project_id:
+        output_file = f"shape_{project_id}.glb"
+        infer_cmd.extend(["--output_file", output_file])
+    
     if use_ema:
         infer_cmd.append("--use_ema")
     
@@ -157,6 +163,8 @@ def main():
                         help='Path to input image')
     parser.add_argument('--output_path', type=str, required=True,
                         help='Output directory for results')
+    parser.add_argument('--project_id', type=str, default=None,
+                        help='Project ID for standard naming (e.g., shape_{project_id}.glb)')
     
     # OpenAI options
     # Note: API key is now required via OPENAI_API_KEY environment variable
@@ -191,6 +199,7 @@ def main():
     exit_code = run_auto_scale_pipeline(
         image_path=args.image_path,
         output_dir=args.output_path,
+        project_id=args.project_id,
         openai_model=args.openai_model,
         custom_prompt=args.custom_prompt,
         guidance_scale=args.guidance_scale,

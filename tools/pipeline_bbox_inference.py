@@ -96,6 +96,7 @@ def run_bbox_inference(
     image_path: str,
     detections_json: str,
     output_dir: str,
+    output_file: Optional[str] = None,
     repo_id: str = "tencent/Hunyuan3D-Omni",
     guidance_scale: float = 4.5,
     num_inference_steps: int = 50,
@@ -221,8 +222,17 @@ def run_bbox_inference(
             mesh = result['shapes'][0][0]
             sampled_point = result['sampled_point'][0]
             
-            # Save outputs
-            file_name = f"{base_name}_{idx:02d}_{obj_name}"
+            # Save outputs with standard naming convention
+            # If output_file is provided (from pipeline), use it for the primary object
+            # Otherwise use descriptive naming for standalone use
+            if idx == 0 and output_file:
+                # Use the output filename provided by the pipeline (e.g., shape_{did}.glb)
+                file_name = Path(output_file).stem  # Remove .glb extension
+                logger.info(f"Saved mesh: {output_file}")
+            else:
+                # Fallback or additional objects use descriptive names
+                file_name = f"{base_name}_{idx:02d}_{obj_name}"
+            
             postprocess_mesh(mesh, file_name, output_dir, sampled_point, image_path)
             
             # Save detection metadata
@@ -246,8 +256,6 @@ def run_bbox_inference(
             metadata_path = os.path.join(output_dir, f'{file_name}_metadata.json')
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
-            
-            logger.info(f"  ✓ Saved: {file_name}.glb")
             
             results["processed"] += 1
             results["objects"].append({
@@ -295,6 +303,8 @@ def main():
                         help='Path to JSON file with detected bounding boxes')
     parser.add_argument('--output_path', type=str, required=True,
                         help='Output directory for generated 3D models')
+    parser.add_argument('--output_file', type=str, default=None,
+                        help='Output filename (e.g., shape_{did}.glb) for pipeline integration')
     
     # Model arguments
     parser.add_argument('--repo_id', type=str, default='tencent/Hunyuan3D-Omni',
@@ -328,6 +338,7 @@ def main():
             image_path=args.image_path,
             detections_json=args.detections_json,
             output_dir=args.output_path,
+            output_file=args.output_file,
             repo_id=args.repo_id,
             guidance_scale=args.guidance_scale,
             num_inference_steps=args.num_inference_steps,
