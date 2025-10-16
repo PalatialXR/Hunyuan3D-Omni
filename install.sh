@@ -66,7 +66,11 @@ print_info "Python version: ${CURRENT_PYTHON}"
 
 # Install PyTorch with CUDA 12.4 support
 print_info "Installing PyTorch 2.5.1 with CUDA 12.4 support..."
+<<<<<<< Updated upstream
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+=======
+python -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+>>>>>>> Stashed changes
 
 # Verify CUDA availability
 print_info "Verifying CUDA availability..."
@@ -78,12 +82,20 @@ cd "${SCRIPT_DIR}"
 
 # Remove the extra-index-url lines from requirements as they might cause issues
 # Install from clean requirements
+<<<<<<< Updated upstream
 pip install --upgrade pip wheel setuptools
+=======
+python -m pip install --upgrade pip wheel setuptools
+>>>>>>> Stashed changes
 
 # Install requirements.txt
 if [ -f "requirements.txt" ]; then
     print_info "Installing from requirements.txt..."
+<<<<<<< Updated upstream
     pip install -r requirements.txt
+=======
+    python -m pip install -r requirements.txt
+>>>>>>> Stashed changes
 else
     print_error "requirements.txt not found in ${SCRIPT_DIR}"
     exit 1
