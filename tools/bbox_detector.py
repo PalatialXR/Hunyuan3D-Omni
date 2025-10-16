@@ -340,8 +340,16 @@ def convert_to_3d_bbox(
     """
     Convert 2D bounding box with depth to 3D scale vector for Hunyuan3D-Omni.
     
-    Hunyuan3D-Omni bbox format is [width, height, depth] representing relative scales,
-    NOT corner coordinates.
+    Uses uniform scaling with correspondence between dominant dimensions:
+    1. Find the largest dimension in BOTH 2D bbox space AND real-world space
+    2. Calculate scale factor that maps one to the other
+    3. Apply that single scale factor uniformly to maintain correct proportions
+    
+    This ensures objects maintain their real-world aspect ratios while being
+    sized appropriately based on their visibility in the image.
+    
+    Hunyuan3D-Omni expects bbox as [length, height, width] in 0-1 range.
+    Internally converts to 8 corner points in [-1,1] range.
     
     Args:
         bbox_2d: [x_min, y_min, x_max, y_max] in normalized coords (0-1)
@@ -349,31 +357,54 @@ def convert_to_3d_bbox(
         real_world_dims: Optional real-world dimensions in meters
         
     Returns:
-        [width_scale, height_scale, depth_scale] - 3 values representing object dimensions
+        [width_scale, height_scale, depth_scale] - 3 values in 0-1 range
     """
     x_min, y_min, x_max, y_max = bbox_2d
     z_min, z_max = depth_range
     
     # Calculate bbox dimensions in normalized image space
-    width_2d = x_max - x_min  # 0-1 range
-    height_2d = y_max - y_min  # 0-1 range
-    depth_2d = z_max - z_min  # 0-1 range
+    width_2d = x_max - x_min  # 0-1 range (horizontal in image)
+    height_2d = y_max - y_min  # 0-1 range (vertical in image)
+    depth_2d = z_max - z_min  # 0-1 range (depth/distance)
     
-    # If we have real-world dimensions, use aspect ratios
+    # If we have real-world dimensions, establish correspondence and apply uniform scaling
     if real_world_dims and all(k in real_world_dims for k in ['length_m', 'width_m', 'height_m']):
-        # Normalize to largest dimension
-        max_dim = max(real_world_dims['length_m'], real_world_dims['width_m'], real_world_dims['height_m'])
-        width_scale = real_world_dims['length_m'] / max_dim
-        height_scale = real_world_dims['height_m'] / max_dim
-        depth_scale = real_world_dims['width_m'] / max_dim
+        # Get real-world dimensions (in meters)
+        real_length = real_world_dims['length_m']  # Maps to width (horizontal)
+        real_width = real_world_dims['width_m']    # Maps to depth
+        real_height = real_world_dims['height_m']  # Maps to height (vertical)
+        
+        # Find the largest dimension in BOTH spaces
+        # This establishes the correspondence between image visibility and real size
+        max_real_dim = max(real_length, real_height, real_width)
+        max_2d_dim = max(width_2d, height_2d, depth_2d)
+        
+        # Calculate uniform scale factor based on the correspondence
+        # This maps the largest real dimension to the largest visible dimension
+        scale_factor = max_2d_dim / max_real_dim if max_real_dim > 0 else 1.0
+        
+        # Apply uniform scaling to ALL dimensions
+        # This maintains real-world aspect ratios while sizing based on visibility
+        width_scale = real_length * scale_factor
+        height_scale = real_height * scale_factor
+        depth_scale = real_width * scale_factor
+        
+        # Note: Results should naturally be in 0-1 range due to the correspondence,
+        # but we ensure it just in case
+        max_result = max(width_scale, height_scale, depth_scale)
+        if max_result > 1.0:
+            width_scale /= max_result
+            height_scale /= max_result
+            depth_scale /= max_result
     else:
-        # Use bbox dimensions directly, normalized
-        # Scale to make largest dimension = 1.0
-        max_dim = max(width_2d, height_2d, depth_2d)
-        if max_dim > 0:
-            width_scale = width_2d / max_dim
-            height_scale = height_2d / max_dim
-            depth_scale = depth_2d / max_dim
+        # No real-world dimensions: use 2D bbox proportions directly
+        max_dim_2d = max(width_2d, height_2d, depth_2d)
+        
+        if max_dim_2d > 0:
+            # Normalize all dimensions by the largest one
+            width_scale = width_2d / max_dim_2d
+            height_scale = height_2d / max_dim_2d
+            depth_scale = depth_2d / max_dim_2d
         else:
             width_scale = height_scale = depth_scale = 1.0
     
