@@ -340,13 +340,13 @@ def convert_to_3d_bbox(
     """
     Convert 2D bounding box with depth to 3D scale vector for Hunyuan3D-Omni.
     
-    Uses uniform scaling with correspondence between dominant dimensions:
-    1. Find the largest dimension in BOTH 2D bbox space AND real-world space
-    2. Calculate scale factor that maps one to the other
-    3. Apply that single scale factor uniformly to maintain correct proportions
+    Strategy:
+    - If real-world dimensions are available: Use them directly (in meters)
+    - If not: Use 2D bbox proportions as fallback
     
-    This ensures objects maintain their real-world aspect ratios while being
-    sized appropriately based on their visibility in the image.
+    For most everyday objects (< 1 meter), the real dimensions naturally fit
+    in the 0-1 range that Hunyuan3D-Omni expects. For larger objects, we
+    normalize by the largest dimension.
     
     Hunyuan3D-Omni expects bbox as [length, height, width] in 0-1 range.
     Internally converts to 8 corner points in [-1,1] range.
@@ -358,6 +358,11 @@ def convert_to_3d_bbox(
         
     Returns:
         [width_scale, height_scale, depth_scale] - 3 values in 0-1 range
+        
+    Examples:
+        Water bottle (0.08m × 0.25m × 0.08m) → [0.08, 0.25, 0.08]
+        Banana (0.18m × 0.04m × 0.04m) → [0.18, 0.04, 0.04]
+        Dining table (1.5m × 0.75m × 0.9m) → [0.67, 0.33, 0.40] (normalized)
     """
     x_min, y_min, x_max, y_max = bbox_2d
     z_min, z_max = depth_range
@@ -367,30 +372,20 @@ def convert_to_3d_bbox(
     height_2d = y_max - y_min  # 0-1 range (vertical in image)
     depth_2d = z_max - z_min  # 0-1 range (depth/distance)
     
-    # If we have real-world dimensions, establish correspondence and apply uniform scaling
+    # If we have real-world dimensions, use them directly
     if real_world_dims and all(k in real_world_dims for k in ['length_m', 'width_m', 'height_m']):
         # Get real-world dimensions (in meters)
         real_length = real_world_dims['length_m']  # Maps to width (horizontal)
         real_width = real_world_dims['width_m']    # Maps to depth
         real_height = real_world_dims['height_m']  # Maps to height (vertical)
         
-        # Find the largest dimension in BOTH spaces
-        # This establishes the correspondence between image visibility and real size
-        max_real_dim = max(real_length, real_height, real_width)
-        max_2d_dim = max(width_2d, height_2d, depth_2d)
+        # Use real-world dimensions directly
+        # For most everyday objects, dimensions are < 1 meter and fit naturally in 0-1 range
+        width_scale = real_length
+        height_scale = real_height
+        depth_scale = real_width
         
-        # Calculate uniform scale factor based on the correspondence
-        # This maps the largest real dimension to the largest visible dimension
-        scale_factor = max_2d_dim / max_real_dim if max_real_dim > 0 else 1.0
-        
-        # Apply uniform scaling to ALL dimensions
-        # This maintains real-world aspect ratios while sizing based on visibility
-        width_scale = real_length * scale_factor
-        height_scale = real_height * scale_factor
-        depth_scale = real_width * scale_factor
-        
-        # Note: Results should naturally be in 0-1 range due to the correspondence,
-        # but we ensure it just in case
+        # Only normalize if any dimension exceeds 1.0 (objects larger than 1 meter)
         max_result = max(width_scale, height_scale, depth_scale)
         if max_result > 1.0:
             width_scale /= max_result

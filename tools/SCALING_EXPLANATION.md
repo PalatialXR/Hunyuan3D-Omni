@@ -1,165 +1,202 @@
-# Uniform Scaling Approach - Explanation
+# Direct Real-World Dimensions Approach
 
-## The Problem
-When generating 3D meshes from images, we need to maintain correct object proportions while sizing them appropriately based on their visibility in the image. Applying different scale factors to each axis would distort the object.
+## The Strategy
 
-## The Solution
-**Uniform scaling with correspondence**: Scale ONE axis based on the relationship between image visibility and real-world size, then apply that same scale to all axes.
+**Simple and direct**: Pass real-world dimensions (in meters) directly to Hunyuan3D-Omni, with minimal processing.
 
 ## How It Works
 
-### Step 1: Find Dominant Dimensions
-- **2D bbox**: Find the largest dimension (width, height, or depth)
-- **Real-world**: Find the largest dimension (length, width, or height)
+### When Real-World Dimensions Are Available
 
-### Step 2: Establish Correspondence
-Calculate scale factor: `scale = max_2d_dimension / max_real_dimension`
+1. **Use them directly** (in meters)
+2. **Only normalize** if any dimension exceeds 1 meter
 
-### Step 3: Apply Uniformly
-Apply the same scale factor to ALL three dimensions to maintain aspect ratios.
+### Example: Water Bottle
 
-## Example: Banana
-
-### Input Data
-```
-2D BBox: [0.2, 0.3, 0.8, 0.7]
-  → width_2d  = 0.8 - 0.2 = 0.6  (60% of image width)
-  → height_2d = 0.7 - 0.3 = 0.4  (40% of image height)
-
-Depth: [0.0, 0.18]
-  → depth_2d = 0.18 - 0.0 = 0.18
-
-Real-world dimensions:
-  → length = 0.18m (banana is 18cm long)
-  → width  = 0.04m (4cm thick)
-  → height = 0.04m (4cm tall)
-```
-
-### Calculation
-```
-1. Find dominant dimensions:
-   max_2d_dim = max(0.6, 0.4, 0.18) = 0.6  (width is most visible)
-   max_real_dim = max(0.18, 0.04, 0.04) = 0.18m  (length is longest)
-
-2. Calculate uniform scale factor:
-   scale_factor = 0.6 / 0.18 = 3.333
-
-3. Apply to all dimensions:
-   width_scale  = 0.18m × 3.333 = 0.60
-   height_scale = 0.04m × 3.333 = 0.133
-   depth_scale  = 0.04m × 3.333 = 0.133
-
-4. Result: [0.60, 0.133, 0.133]
-```
-
-### Why This Works
-- ✅ **Maintains aspect ratio**: 0.60 : 0.133 : 0.133 = 4.5 : 1 : 1 (correct banana proportions)
-- ✅ **Respects visibility**: Dominant visible dimension (0.6) corresponds to dominant real dimension
-- ✅ **In valid range**: All values are in [0, 1] as required by Hunyuan3D-Omni
-- ✅ **No distortion**: Single scale factor applied uniformly
-
-## Example: Water Bottle
-
-### Input Data
-```
-2D BBox: [0.4, 0.2, 0.6, 0.8]
-  → width_2d  = 0.2  (20% of image)
-  → height_2d = 0.6  (60% of image - dominant!)
-
-Depth: [0.3, 0.4]
-  → depth_2d = 0.1
-
-Real-world dimensions:
-  → length = 0.08m (8cm diameter)
-  → width  = 0.08m (8cm diameter)
-  → height = 0.25m (25cm tall - dominant!)
-```
-
-### Calculation
-```
-1. Find dominant dimensions:
-   max_2d_dim = max(0.2, 0.6, 0.1) = 0.6  (height is most visible)
-   max_real_dim = max(0.08, 0.08, 0.25) = 0.25m  (height is tallest)
-
-2. Calculate uniform scale factor:
-   scale_factor = 0.6 / 0.25 = 2.4
-
-3. Apply to all dimensions:
-   width_scale  = 0.08m × 2.4 = 0.192
-   height_scale = 0.25m × 2.4 = 0.60
-   depth_scale  = 0.08m × 2.4 = 0.192
-
-4. Result: [0.192, 0.60, 0.192]
-```
-
-### Why This Works
-- ✅ **Correct correspondence**: Tallest real dimension (height) matches tallest visible dimension
-- ✅ **Cylindrical shape preserved**: width = depth (maintains circular cross-section)
-- ✅ **Appropriate scale**: 60% visibility in height translates to 60% in the output
-
-## Key Benefits
-
-1. **One Axis Reference**: Uses single dominant axis to determine scale
-2. **Proportions Locked**: All other dimensions scale proportionally
-3. **Smart Correspondence**: Matches dominant real dimension to dominant visible dimension
-4. **No Distortion**: Uniform scaling preserves object shape
-5. **Approximate Real-World Scale**: Output reflects both visibility and actual size
-
-## Technical Details
-
-### Hunyuan3D-Omni Requirements
-- **Input format**: 3 values `[length, height, width]`
-- **Value range**: 0-1 (normalized)
-- **Internal processing**: Converts to 8 corner points in [-1, 1] range
-- **Shape**: Tensor of shape `[batch, 1, 3]`
-
-### Fallback Behavior
-If no real-world dimensions are provided:
 ```python
-# Simply normalize 2D bbox dimensions
-max_dim = max(width_2d, height_2d, depth_2d)
-result = [width_2d/max_dim, height_2d/max_dim, depth_2d/max_dim]
+Input dimensions:
+  length_m: 0.08  (8cm diameter)
+  width_m: 0.08   (8cm diameter) 
+  height_m: 0.25  (25cm tall)
+
+Output to Hunyuan3D:
+  [0.08, 0.25, 0.08]  # Direct pass-through
 ```
 
-This maintains the proportions from the 2D bbox itself.
+### Example: Banana
 
-## Comparison to Other Approaches
-
-### ❌ Independent Scaling Per Axis
 ```python
-# BAD: Each axis scaled independently
-width_scale = width_2d * some_factor_x
-height_scale = height_2d * some_factor_y
-depth_scale = depth_2d * some_factor_z
-```
-**Problem**: Different factors distort the object shape
+Input dimensions:
+  length_m: 0.18  (18cm long)
+  width_m: 0.04   (4cm thick)
+  height_m: 0.04  (4cm tall)
 
-### ❌ Direct Real Dimensions
-```python
-# BAD: Using raw meter values
-width_scale = real_length  # e.g., 0.18
-height_scale = real_height # e.g., 0.04
+Output to Hunyuan3D:
+  [0.18, 0.04, 0.04]  # Direct pass-through
 ```
-**Problem**: Ignores image visibility and context
 
-### ✅ Uniform Scaling with Correspondence (Current)
+### Example: Dining Table (> 1 meter)
+
 ```python
-# GOOD: Single scale from dominant dimensions
-scale = max_visible / max_real
-width_scale = real_length * scale
-height_scale = real_height * scale
-depth_scale = real_width * scale
+Input dimensions:
+  length_m: 1.5   (150cm long)
+  width_m: 0.9    (90cm wide)
+  height_m: 0.75  (75cm tall)
+
+Max dimension: 1.5m (exceeds 1.0)
+
+Normalized output:
+  [1.5/1.5, 0.75/1.5, 0.9/1.5] = [1.0, 0.5, 0.6]
 ```
-**Benefits**: Maintains shape, respects visibility, uses real proportions
+
+## Code Implementation
+
+```python
+def convert_to_3d_bbox(bbox_2d, depth_range, real_world_dims=None):
+    if real_world_dims:
+        # Use real-world dimensions directly
+        width_scale = real_world_dims['length_m']
+        height_scale = real_world_dims['height_m']
+        depth_scale = real_world_dims['width_m']
+        
+        # Only normalize if any dimension > 1.0
+        max_result = max(width_scale, height_scale, depth_scale)
+        if max_result > 1.0:
+            width_scale /= max_result
+            height_scale /= max_result
+            depth_scale /= max_result
+    else:
+        # Fallback: use 2D bbox proportions
+        width_2d = bbox_2d[2] - bbox_2d[0]
+        height_2d = bbox_2d[3] - bbox_2d[1]
+        depth_2d = depth_range[1] - depth_range[0]
+        
+        max_dim = max(width_2d, height_2d, depth_2d)
+        width_scale = width_2d / max_dim
+        height_scale = height_2d / max_dim
+        depth_scale = depth_2d / max_dim
+    
+    return [width_scale, height_scale, depth_scale]
+```
+
+## Why This Works
+
+### ✅ Advantages
+
+1. **Simple**: No complex scaling calculations
+2. **Intuitive**: Meters in → normalized meters out
+3. **Preserves proportions**: Real aspect ratios maintained
+4. **Natural fit**: Most objects < 1m fit naturally in 0-1 range
+5. **Model decides**: Let Hunyuan3D interpret the scale
+
+### 🤔 What About Image Visibility?
+
+The 2D bbox information is **still used** by Hunyuan3D-Omni internally to:
+- Determine which part of the image to focus on
+- Understand object placement and context
+- Guide the generation process
+
+The bbox scale values (0-1 range) provide **relative size information** that the model uses alongside the image features.
+
+## Hunyuan3D-Omni Requirements
+
+From the source code (`omni_encoder.py`):
+
+```python
+def bbox_to_corners(self, bbox):
+    """
+    Convert bbox (B,1,3) to 8 corner points (range[-1,1])
+    
+    Parameters:
+        bbox: torch.Tensor, shape (B,1,3), [length, height, width] (range 0~1)
+    
+    Returns:
+        corners: torch.Tensor, shape (B,8,3), 8 corner xyz coordinates
+    """
+```
+
+**Key facts:**
+- Input format: 3 values `[length, height, width]`
+- Expected range: 0 to 1
+- Internally converted to 8 corner points in [-1, 1] range
+
+## Comparison to Previous Approaches
+
+### ❌ Complex Scaling with Correspondence
+```python
+# OLD: Complex calculation
+max_2d = max(width_2d, height_2d, depth_2d)
+max_real = max(real_length, real_height, real_width)
+scale_factor = max_2d / max_real
+result = [real_length * scale_factor, ...]
+```
+**Problem**: Overthinking it, loses direct size information
+
+### ✅ Direct Dimensions (Current)
+```python
+# NEW: Simple and direct
+result = [real_length, real_height, real_width]
+# Only normalize if > 1.0
+```
+**Benefits**: Simple, intuitive, preserves actual scale
+
+## Expected Behavior
+
+### Small Objects (< 1 meter)
+- Input: Real dimensions in meters
+- Output: Same values (direct pass-through)
+- Result: Mesh should be close to real-world size
+
+### Large Objects (> 1 meter)
+- Input: Real dimensions in meters
+- Output: Normalized to largest dimension = 1.0
+- Result: Mesh maintains proportions, scaled to fit
+
+### No Real-World Data
+- Input: 2D bbox only
+- Output: Proportions from image bbox
+- Result: Reasonable shape, arbitrary absolute scale
+
+## Testing Examples
+
+### ✅ Water Bottle
+```
+Real: 0.08m × 0.25m × 0.08m
+Output: [0.08, 0.25, 0.08]
+Expected result: ~25cm tall bottle with circular cross-section
+```
+
+### ✅ Banana
+```
+Real: 0.18m × 0.04m × 0.04m
+Output: [0.18, 0.04, 0.04]
+Expected result: ~18cm long banana, 4.5:1 length:thickness ratio
+```
+
+### ✅ Coffee Mug
+```
+Real: 0.09m × 0.10m × 0.09m
+Output: [0.09, 0.10, 0.09]
+Expected result: ~10cm tall mug with circular base
+```
+
+### ✅ Dining Chair
+```
+Real: 0.45m × 0.90m × 0.50m
+Output: [0.45, 0.90, 0.50]
+Expected result: ~90cm tall chair with correct proportions
+```
 
 ## Summary
 
-The uniform scaling approach ensures that:
-1. Objects maintain their **real-world proportions**
-2. Scale is informed by **image visibility** (how prominent they appear)
-3. A **single reference axis** determines the scale factor
-4. All dimensions scale **uniformly** (no distortion)
-5. Results are in the **required 0-1 range**
+The direct approach:
+1. **Trusts the AI** to provide accurate real-world dimensions
+2. **Passes them directly** to the model (in meters)
+3. **Only normalizes** when dimensions exceed 1 meter
+4. **Preserves proportions** naturally
+5. **Keeps it simple** - no complex calculations
 
-This gives you meshes with correct shapes at appropriate sizes!
-
+This should give you meshes that are:
+- ✅ Correct shape (proper aspect ratios)
+- ✅ Appropriate size (based on real-world dimensions)
+- ✅ Ready to use (minimal post-processing needed)
