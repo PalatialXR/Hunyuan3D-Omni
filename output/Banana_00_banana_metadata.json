@@ -1,0 +1,32 @@
+{
+  "object_name": "banana",
+  "description": "A single yellow banana with a slightly curved shape and some brown spots.",
+  "bbox_2d": [
+    0.2,
+    0.3,
+    0.8,
+    0.7
+  ],
+  "depth_range": [
+    0.0,
+    0.18
+  ],
+  "bbox_3d_scale": [
+    1.0,
+    0.22222222222222224,
+    0.22222222222222224
+  ],
+  "real_world_dimensions": {
+    "length_m": 0.18,
+    "width_m": 0.04,
+    "height_m": 0.04
+  },
+  "inference_params": {
+    "guidance_scale": 4.5,
+    "num_inference_steps": 50,
+    "octree_resolution": 512,
+    "seed": 1234,
+    "use_ema": true,
+    "flashvdm": true
+  }
+}

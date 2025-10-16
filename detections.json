@@ -1,0 +1,23 @@
+[
+  {
+    "name": "banana",
+    "description": "A single yellow banana with a slightly curved shape and some brown spots.",
+    "bbox_2d": [
+      0.2,
+      0.3,
+      0.8,
+      0.7
+    ],
+    "depth": [
+      0.0,
+      0.18
+    ],
+    "real_world_dimensions": {
+      "length_m": 0.18,
+      "width_m": 0.04,
+      "height_m": 0.04
+    },
+    "confidence": 0.95,
+    "reasoning": "The object is clearly a banana due to its characteristic shape and color. The banana is centrally located in the image with a slight curve. Typical banana dimensions are about 18 cm in length and 4 cm in width and height. The image shows a single object with no occlusion, allowing for clear 3D reconstruction."
+  }
+]

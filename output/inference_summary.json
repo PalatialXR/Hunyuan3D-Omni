@@ -1,0 +1,12 @@
+{
+  "status": "success",
+  "processed": 1,
+  "failed": 0,
+  "objects": [
+    {
+      "name": "banana",
+      "file": "Banana_00_banana.glb",
+      "status": "success"
+    }
+  ]
+}

@@ -64,3 +64,6 @@ torchmetrics==1.6.0
 
 # Optional
 pydantic==2.10.6
+
+# OpenAI API (for automatic bbox detection)
+openai>=1.0.0
