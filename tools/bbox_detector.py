@@ -278,10 +278,27 @@ Guidelines:
                     logger.warning(f"Skipping detection with missing fields: {det.get('name', 'unknown')}")
                     continue
                 
-                # Add defaults for optional fields
+                # Add defaults for optional fields first
                 det.setdefault('description', det.get('name', 'object'))
                 det.setdefault('confidence', 0.8)
                 det.setdefault('reasoning', 'Detected with standard analysis')
+                
+                # Normalize bbox coordinates to 2 decimal places
+                if 'bbox_2d' in det and isinstance(det['bbox_2d'], list) and len(det['bbox_2d']) == 4:
+                    det['bbox_2d'] = [round(float(coord), 2) for coord in det['bbox_2d']]
+                
+                # Normalize depth to 2 decimal places
+                if 'depth' in det and isinstance(det['depth'], list) and len(det['depth']) == 2:
+                    det['depth'] = [round(float(coord), 2) for coord in det['depth']]
+                
+                # Normalize real-world dimensions to 2 decimal places
+                if 'real_world_dimensions' in det and isinstance(det['real_world_dimensions'], dict):
+                    for key in ['length_m', 'width_m', 'height_m']:
+                        if key in det['real_world_dimensions']:
+                            det['real_world_dimensions'][key] = round(float(det['real_world_dimensions'][key]), 2)
+                
+                # Normalize confidence to 2 decimal places
+                det['confidence'] = round(float(det['confidence']), 2)
                 
                 validated_detections.append(det)
             except Exception as e:
