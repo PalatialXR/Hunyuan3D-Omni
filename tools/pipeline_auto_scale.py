@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 def run_auto_scale_pipeline(
     image_path: str,
     output_dir: str,
-    api_key: Optional[str] = None,
     openai_model: str = "gpt-4o",
     custom_prompt: Optional[str] = None,
     guidance_scale: float = 4.5,
@@ -73,16 +72,14 @@ def run_auto_scale_pipeline(
         "--log_level", log_level
     ]
     
-    if api_key:
-        detect_cmd.extend(["--api_key", api_key])
-    
     if custom_prompt:
         detect_cmd.extend(["--prompt", custom_prompt])
     
     logger.debug(f"Detection command: {' '.join(detect_cmd)}")
     
     try:
-        result = subprocess.run(detect_cmd, check=True, capture_output=False)
+        # Explicitly pass environment to ensure OPENAI_API_KEY is inherited
+        result = subprocess.run(detect_cmd, check=True, capture_output=False, env=os.environ)
     except subprocess.CalledProcessError as e:
         logger.error(f"Detection failed with exit code {e.returncode}")
         return e.returncode
@@ -122,7 +119,8 @@ def run_auto_scale_pipeline(
     logger.debug(f"Command: {' '.join(infer_cmd)}")
     
     try:
-        result = subprocess.run(infer_cmd, check=True, capture_output=False)
+        # Explicitly pass environment to ensure all env vars are inherited
+        result = subprocess.run(infer_cmd, check=True, capture_output=False, env=os.environ)
     except subprocess.CalledProcessError as e:
         logger.error(f"Inference failed with exit code {e.returncode}")
         return e.returncode
@@ -161,8 +159,7 @@ def main():
                         help='Output directory for results')
     
     # OpenAI options
-    parser.add_argument('--api_key', type=str, default=None,
-                        help='OpenAI API key (or set OPENAI_API_KEY env var)')
+    # Note: API key is now required via OPENAI_API_KEY environment variable
     parser.add_argument('--openai_model', type=str, default='gpt-4o',
                         help='OpenAI model for detection')
     parser.add_argument('--custom_prompt', type=str, default=None,
@@ -194,7 +191,6 @@ def main():
     exit_code = run_auto_scale_pipeline(
         image_path=args.image_path,
         output_dir=args.output_path,
-        api_key=args.api_key,
         openai_model=args.openai_model,
         custom_prompt=args.custom_prompt,
         guidance_scale=args.guidance_scale,

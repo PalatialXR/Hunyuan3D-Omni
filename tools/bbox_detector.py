@@ -163,7 +163,6 @@ Guidelines:
 
 def detect_bounding_boxes_with_cot(
     image_path: str,
-    api_key: Optional[str] = None,
     prompt: Optional[str] = None,
     model: str = "gpt-4o",
     output_json: Optional[str] = None,
@@ -181,7 +180,6 @@ def detect_bounding_boxes_with_cot(
     
     Args:
         image_path: Path to input image
-        api_key: OpenAI API key (or uses OPENAI_API_KEY env var)
         prompt: Custom prompt for detection (optional)
         model: OpenAI model to use (gpt-4o recommended)
         output_json: Optional path to save detection results
@@ -189,6 +187,9 @@ def detect_bounding_boxes_with_cot(
         
     Returns:
         List of detected objects with comprehensive bbox information
+        
+    Note:
+        Requires OPENAI_API_KEY environment variable to be set
     """
     logger.info(f"Analyzing image with chain-of-thought reasoning: {image_path}")
     
@@ -230,10 +231,10 @@ Guidelines:
 - Be explicit about uncertainty in your reasoning field
 - Tight bounding boxes around each object"""
 
-    # Get API key and initialize client
-    api_key = api_key or os.getenv('OPENAI_API_KEY')
+    # Get API key from environment and initialize client
+    api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
-        raise ValueError("OpenAI API key not provided")
+        raise ValueError("OPENAI_API_KEY environment variable not set")
     
     client = OpenAI(api_key=api_key)
     base64_image = encode_image_to_base64(image_path)
@@ -392,8 +393,7 @@ def main():
                         help='Path to input image')
     parser.add_argument('--output', type=str, default=None,
                         help='Path to save detection JSON (default: {image_dir}/detections.json)')
-    parser.add_argument('--api_key', type=str, default=None,
-                        help='OpenAI API key (or set OPENAI_API_KEY env var)')
+    # Note: API key is now required via OPENAI_API_KEY environment variable
     parser.add_argument('--model', type=str, default='gpt-4o',
                         help='OpenAI model to use')
     parser.add_argument('--prompt', type=str, default=None,
@@ -419,7 +419,6 @@ def main():
     try:
         detections = detect_bounding_boxes(
             image_path=args.image,
-            api_key=args.api_key,
             prompt=args.prompt,
             model=args.model,
             output_json=args.output
