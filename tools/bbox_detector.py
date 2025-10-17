@@ -825,13 +825,16 @@ def convert_to_3d_bbox(
     """
     Convert 2D bounding box with depth to 3D scale vector for Hunyuan3D-Omni.
     
-    NEW STRATEGY (Volumetric Scaling):
-    1. Always use 2D bbox proportions for shape (captures visual appearance)
-    2. If real-world dims available, return scale factor for post-generation scaling
-    3. This separates shape (from image) and size (from real-world knowledge)
+    STRATEGY: Normalized Generation + Volumetric Scaling
+    1. Always generate at normalized 1x1x1 scale (using 2D bbox proportions)
+    2. Calculate volumetric scale factor from real-world dimensions
+    3. Apply uniform scale to generated mesh to achieve real-world size
     
-    Hunyuan3D-Omni expects bbox as [length, height, width] in 0-1 range.
-    Internally converts to 8 corner points in [-1,1] range.
+    This separates "shape" (from image) and "size" (from knowledge), and ensures
+    consistent generation quality at a standard scale.
+    
+    Hunyuan3D-Omni expects bbox as [width, height, depth] in 0-1 range.
+    Internally converts to coordinates in [-1,1] range (~2.0 unit output space).
     
     Args:
         bbox_2d: [x_min, y_min, x_max, y_max] in normalized coords (0-1)
@@ -840,13 +843,14 @@ def convert_to_3d_bbox(
         
     Returns:
         Tuple of:
-        - bbox_3d: [width_scale, height_scale, depth_scale] - 3 values in 0-1 range
-        - scale_factor: Optional uniform scale to apply to generated mesh (None if no real dims)
+        - bbox_3d: [width_scale, height_scale, depth_scale] - normalized proportions
+        - scale_factor: Uniform scale to apply post-generation (None if no real dims)
         
     Examples:
-        Water bottle with 2D bbox [0.2,0.1,0.8,0.9], depth [0.0,0.2]:
-        → bbox_3d: [0.75, 1.0, 0.25] (normalized 2D proportions)
-        → scale_factor: 0.267 (to achieve 0.08m × 0.25m × 0.08m final size)
+        Water bottle with 2D bbox [0.4,0.1,0.6,0.9], depth [0.0,0.2]:
+        → bbox_3d: [0.25, 1.0, 0.25] (normalized from 2D, generates at ~2.0m tall)
+        → Real dims: 0.08m × 0.25m × 0.08m
+        → scale_factor: 0.147x (scales 2.0m mesh down to 0.25m)
     """
     x_min, y_min, x_max, y_max = bbox_2d
     z_min, z_max = depth_range
@@ -856,7 +860,7 @@ def convert_to_3d_bbox(
     height_2d = y_max - y_min  # 0-1 range (vertical in image)
     depth_2d = z_max - z_min  # 0-1 range (depth/distance)
     
-    # Always use 2D bbox proportions for shape (normalized to largest dim)
+    # ALWAYS use normalized proportions for shape (largest dimension = 1.0)
     max_dim_2d = max(width_2d, height_2d, depth_2d)
     
     if max_dim_2d > 0:
@@ -872,34 +876,35 @@ def convert_to_3d_bbox(
     scale_factor = None
     if real_world_dims and all(k in real_world_dims for k in ['length_m', 'width_m', 'height_m']):
         # Get real-world dimensions (in meters)
-        real_length = real_world_dims['length_m']
         real_width = real_world_dims['width_m']
         real_height = real_world_dims['height_m']
+        real_depth = real_world_dims['length_m']  # length maps to depth/Z axis
         
         # IMPORTANT: Hunyuan3D outputs meshes in [-1.01, 1.01] coordinate space
-        # This means the generated mesh spans ~2.0 units in its largest dimension
-        # We need to account for this when calculating the scale factor
+        # With bbox max dimension = 1.0, the generated mesh will be ~2.0 units in that dimension
+        HUNYUAN_OUTPUT_SCALE = 2.0
         
-        # The normalized bbox_3d values (0-1 range) will be converted by Hunyuan to
-        # actual coordinates in [-1, 1] range, so largest dimension will be ~2.0 units
-        HUNYUAN_OUTPUT_SCALE = 2.0  # Approximate size of Hunyuan's output space
-        
-        # Calculate the size of the generated mesh (before scaling)
-        # Since bbox_3d is normalized with max=1.0, the largest output dimension ≈ 2.0 units
-        # The actual dimensions will be proportional to bbox_3d
+        # Calculate the actual size of the generated mesh (before scaling)
+        # The largest dimension will be ~2.0 units, others scaled proportionally
         generated_width = width_scale * HUNYUAN_OUTPUT_SCALE
         generated_height = height_scale * HUNYUAN_OUTPUT_SCALE
         generated_depth = depth_scale * HUNYUAN_OUTPUT_SCALE
         
         # Calculate volumes
         generated_volume = generated_width * generated_height * generated_depth
-        target_volume = real_length * real_width * real_height
+        target_volume = real_width * real_height * real_depth
         
         # Uniform scale factor (cube root to preserve proportions)
         if generated_volume > 0:
             scale_factor = (target_volume / generated_volume) ** (1.0 / 3.0)
-            logger.debug(f"  [Volumetric] Generated vol: {generated_volume:.6f}m³, "
-                        f"Target vol: {target_volume:.6f}m³, Scale: {scale_factor:.3f}x")
+            
+            logger.debug(f"  [Volumetric] Generated: {generated_width:.3f}m × "
+                        f"{generated_height:.3f}m × {generated_depth:.3f}m "
+                        f"(vol: {generated_volume:.6f}m³)")
+            logger.debug(f"  [Volumetric] Target: {real_width:.3f}m × "
+                        f"{real_height:.3f}m × {real_depth:.3f}m "
+                        f"(vol: {target_volume:.6f}m³)")
+            logger.debug(f"  [Volumetric] Scale factor: {scale_factor:.4f}x")
     
     return bbox_3d, scale_factor
 
