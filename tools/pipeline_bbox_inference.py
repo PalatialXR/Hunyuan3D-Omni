@@ -190,17 +190,19 @@ def run_bbox_inference(
         bbox_2d = detection['bbox_2d']
         depth_range = detection.get('depth', [0.3, 0.7])
         
-        # Convert to 3D bbox
+        # Convert to 3D bbox (now returns bbox and optional scale factor)
         # Get real-world dimensions if available
         real_world_dims = detection.get('real_world_dimensions')
-        bbox_3d = convert_to_3d_bbox(bbox_2d, depth_range, real_world_dims)
+        bbox_3d, scale_factor = convert_to_3d_bbox(bbox_2d, depth_range, real_world_dims)
         
         logger.info(f"\n[{idx+1}/{len(detections)}] Processing: {detection['name']}")
         logger.info(f"  2D BBox: {bbox_2d}")
         logger.info(f"  Depth: {depth_range}")
-        logger.info(f"  3D Scale: {[f'{v:.3f}' for v in bbox_3d]} (width, height, depth)")
+        logger.info(f"  3D BBox (shape): {[f'{v:.3f}' for v in bbox_3d]} (width, height, depth)")
         if real_world_dims:
             logger.info(f"  Real dims: {real_world_dims}")
+        if scale_factor:
+            logger.info(f"  Volumetric scale: {scale_factor:.3f}x")
         
         # Prepare bbox tensor [1, 1, 3] - Hunyuan3D-Omni expects 3 values
         bbox_tensor = torch.FloatTensor(bbox_3d).unsqueeze(0).unsqueeze(0)
@@ -222,6 +224,13 @@ def run_bbox_inference(
             mesh = result['shapes'][0][0]
             sampled_point = result['sampled_point'][0]
             
+            # Apply volumetric scaling if we have real-world dimensions
+            if scale_factor is not None:
+                logger.info(f"  Applying volumetric scale: {scale_factor:.3f}x")
+                mesh.apply_scale(scale_factor)
+                # Scale point cloud as well
+                sampled_point = sampled_point * scale_factor
+            
             # Save outputs with standard naming convention
             # If output_file is provided (from pipeline), use it for the primary object
             # Otherwise use descriptive naming for standalone use
@@ -241,8 +250,10 @@ def run_bbox_inference(
                 'description': detection.get('description', ''),
                 'bbox_2d': bbox_2d,
                 'depth_range': depth_range,
-                'bbox_3d_scale': bbox_3d,
+                'bbox_3d_shape': bbox_3d,
+                'volumetric_scale_factor': scale_factor,
                 'real_world_dimensions': real_world_dims,
+                'final_scaled': scale_factor is not None,
                 'inference_params': {
                     'guidance_scale': guidance_scale,
                     'num_inference_steps': num_inference_steps,
@@ -250,7 +261,8 @@ def run_bbox_inference(
                     'seed': seed,
                     'use_ema': use_ema,
                     'flashvdm': flashvdm
-                }
+                },
+                'approach': 'volumetric_scaling' if scale_factor else '2d_bbox_only'
             }
             
             metadata_path = os.path.join(output_dir, f'{file_name}_metadata.json')

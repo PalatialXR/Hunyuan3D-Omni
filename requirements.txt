@@ -65,5 +65,10 @@ torchmetrics==1.6.0
 # Optional
 pydantic==2.10.6
 
-# OpenAI API (for automatic bbox detection)
-openai>=1.0.0
+# AI Detection Options (for automatic bbox detection)
+openai>=1.0.0  # For OpenAI API backend
+
+# NOTE: Qwen3-VL support requires newer transformers (conflict with Hunyuan)
+# To use Qwen3-VL, install in separate environment or upgrade transformers:
+#   pip install git+https://github.com/huggingface/transformers
+# Warning: This may break Hunyuan3D compatibility. Test before using.
