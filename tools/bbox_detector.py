@@ -876,18 +876,30 @@ def convert_to_3d_bbox(
         real_width = real_world_dims['width_m']
         real_height = real_world_dims['height_m']
         
-        # Calculate volumes
-        # Current volume (from normalized 2D bbox)
-        current_volume = width_scale * height_scale * depth_scale
+        # IMPORTANT: Hunyuan3D outputs meshes in [-1.01, 1.01] coordinate space
+        # This means the generated mesh spans ~2.0 units in its largest dimension
+        # We need to account for this when calculating the scale factor
         
-        # Target volume (from real-world dimensions)
-        target_volume = real_length * real_height * real_width
+        # The normalized bbox_3d values (0-1 range) will be converted by Hunyuan to
+        # actual coordinates in [-1, 1] range, so largest dimension will be ~2.0 units
+        HUNYUAN_OUTPUT_SCALE = 2.0  # Approximate size of Hunyuan's output space
+        
+        # Calculate the size of the generated mesh (before scaling)
+        # Since bbox_3d is normalized with max=1.0, the largest output dimension ≈ 2.0 units
+        # The actual dimensions will be proportional to bbox_3d
+        generated_width = width_scale * HUNYUAN_OUTPUT_SCALE
+        generated_height = height_scale * HUNYUAN_OUTPUT_SCALE
+        generated_depth = depth_scale * HUNYUAN_OUTPUT_SCALE
+        
+        # Calculate volumes
+        generated_volume = generated_width * generated_height * generated_depth
+        target_volume = real_length * real_width * real_height
         
         # Uniform scale factor (cube root to preserve proportions)
-        if current_volume > 0:
-            scale_factor = (target_volume / current_volume) ** (1.0 / 3.0)
-            logger.debug(f"  [Volumetric] Current vol: {current_volume:.6f}, "
-                        f"Target vol: {target_volume:.6f}, Scale: {scale_factor:.3f}")
+        if generated_volume > 0:
+            scale_factor = (target_volume / generated_volume) ** (1.0 / 3.0)
+            logger.debug(f"  [Volumetric] Generated vol: {generated_volume:.6f}m³, "
+                        f"Target vol: {target_volume:.6f}m³, Scale: {scale_factor:.3f}x")
     
     return bbox_3d, scale_factor
 
